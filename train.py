@@ -109,30 +109,38 @@ def get_blkdiag_hessian(model, criterion, **kwargs):
     Return: A list of 2x2 tensors, each is the Hessian with respect to a parameter group.
     '''
     dataset = kwargs['dataset']
-    src = dataset[0][0] # for debug, should loop over dataset
-    output = model(src)
-    vocab_size = output.size(-1)
-    loss = criterion(
-        output[:, :-1].contiguous().view(-1, vocab_size),
-        src[:, 1:].contiguous().view(-1),
-    )
-    params = tuple(model.parameters())
-    grads = autograd.grad(loss, params, create_graph=True)
+    data_sample_size = 3
+    indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
 
     H = []
 
-    for i, (grad, p) in enumerate(zip(grads, params)):
-        grad = grad.reshape(-1)
-        d = len(grad)
-        dg = torch.zeros((d, d))
+    for idx_count, idx in enumerate(indices):
+        src = dataset[idx][0]
+        output = model(src)
+        vocab_size = output.size(-1)
+        loss = criterion(
+            output[:, :-1].contiguous().view(-1, vocab_size),
+            src[:, 1:].contiguous().view(-1),
+        )
+        params = tuple(model.parameters())
+        grads = autograd.grad(loss, params, create_graph=True)
+        
+        # process = psutil.Process()
 
-        for j, g in enumerate(grad):
-            
-            g2 = autograd.grad(g, p, retain_graph=True, create_graph=False)[0].view(-1)
-            dg[j] = g2
-
-        H.append(dg)
-
+        for i, (grad, p) in enumerate(zip(grads, params)):
+            grad = grad.reshape(-1)
+            d = len(grad)
+            dg = torch.zeros((d, d))
+            for j, g in enumerate(grad):
+                g2 = autograd.grad(g, p, retain_graph=True, create_graph=False)[0].view(-1)
+                dg[j] = g2
+            # print(f"Memory usage: {process.memory_info().vms / 1024**2} MB")
+            if idx_count == 0:
+                H.append(dg / data_sample_size)
+            else:
+                H[i] += dg / data_sample_size
+        
+    model.zero_grad()
     return H
 
 
@@ -142,7 +150,7 @@ def get_trace_hessian(model, criterion, **kwargs):
     Return: Trace of Hessian evaluated on the loss of randomly drawn data samples.
     '''
     dataset = kwargs['dataset']
-    data_sample_size = 10
+    data_sample_size = 3
     indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
 
     H_traces = []
@@ -166,7 +174,6 @@ def get_trace_hessian(model, criterion, **kwargs):
             grad = grad.reshape(-1)
             d = len(grad)
             dg = torch.zeros((d, d))
-
             for j, g in enumerate(grad):
                 g2 = autograd.grad(g, p, retain_graph=True, create_graph=False)[0].view(-1)
                 dg[j] = g2
@@ -334,6 +341,7 @@ def train_infinite(
     )
 
     err_arr = np.zeros((num_epoch, 6))
+    sharpness_arr = np.zeros((num_epoch,))
     err_arr_json = []
     criterion = (
         nn.CrossEntropyLoss(label_smoothing=0.1)
@@ -406,21 +414,30 @@ def train_infinite(
             loss_test_ood, test_err_ood = loss_err(
                 model, criterion, src_test_ood, M_test_ood
             )
-            if False:
+            if False: # compute full Hessian
                 hessian_train = get_hessian(model, criterion, src=src, dataset=train_dataset)
                 sharpness = torch.trace(hessian_train)
                 print(sharpness)
 
 
-        if False:
-            blkdiag_hessian_train = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
-            sharpness_blk = sum([torch.trace(h) for h in blkdiag_hessian_train])
-            print(sharpness_blk)
+        if True: # compute block-diagonal Hessian
+            if epoch % 1000 == 0:
+                blkdiag_hessian_train = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
+                avg_sharpness = sum([torch.trace(h) for h in blkdiag_hessian_train])
+                spectrum = torch.concat([torch.linalg.eigh(h)[0] for h in blkdiag_hessian_train])
 
-        if True:
-            if epoch % 100 == 0:
+                # inline plot spectrum
+                import matplotlib.pyplot as plt
+                plt.figure()
+                plt.bar(np.arange(len(spectrum)), spectrum)
+                plt.savefig(os.path.join(config.out_dir, f"spectrum_epoch_{epoch}"))
+
+        if False: # directly compute Hessian trace
+            if epoch % 1000 == 0:
                 sharpness_trace = get_trace_hessian(model, criterion, src=src, dataset=train_dataset)
                 avg_sharpness = sum(sharpness_trace) / len(sharpness_trace)
+
+        sharpness_arr[epoch] = avg_sharpness
 
         err_arr[epoch, :] = [
             loss_train.item(),
@@ -484,7 +501,7 @@ def train_infinite(
         save_dir=config.out_dir,
     )
 
-    return model, err_arr, err_arr_json
+    return model, err_arr, sharpness_arr, err_arr_json
 
 
 def train_finite(

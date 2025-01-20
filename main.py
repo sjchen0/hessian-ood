@@ -6,7 +6,7 @@ import torch
 import yaml
 from model import TFModel
 from train import train_finite, train_infinite
-from utils import create_folder, fix_random_seed, plot_err_curve
+from utils import create_folder, fix_random_seed, plot_err_curve, plot_sharpness_curve
 
 print(torch.__version__)
 
@@ -67,7 +67,7 @@ def main(**kwargs):
     scheduler = make_scheduler(optimizer, config)
 
     if config.fresh_sample:
-        model, err_arr, err_arr_json = train_infinite(
+        model, err_arr, sharpness_arr, err_arr_json = train_infinite(
             model=model,
             config=config,
             optimizer=optimizer,
@@ -96,6 +96,11 @@ def main(**kwargs):
         plot_ood=True,
         plot_train=not config.fresh_sample,
         log_training_time=config.fresh_sample,
+    )
+    plot_sharpness_curve(
+        sharpness_arr,
+        fig_name="sharpness_curve",
+        save_dir=config.out_dir
     )
 
     json.dump(

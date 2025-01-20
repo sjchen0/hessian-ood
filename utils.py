@@ -258,6 +258,30 @@ def plot_err_curve(
         plt.savefig(save_path, bbox_inches="tight")
 
 
+def plot_sharpness_curve(
+    sharpness_arr,
+    setting_params=None,
+    fig_name=None,
+    save_dir=None,
+):
+    num_epoch = (
+        setting_params["num_epoch"] if setting_params is not None else sharpness_arr.shape[0]
+    )
+    if fig_name is not None:
+        if save_dir is None:
+            if not os.path.isdir("Figs"):
+                os.mkdir("Figs")
+            save_path = os.path.join("Figs", fig_name)
+        else:
+            save_path = os.path.join(save_dir, fig_name)
+
+    plt.figure()
+    plt.plot(sharpness_arr)
+    if fig_name is None:
+        plt.show()
+    else:
+        plt.savefig(save_path, bbox_inches="tight")
+
 def plot_err_curve_hmm(
     err_arr,
     setting_params=None,

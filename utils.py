@@ -257,6 +257,30 @@ def plot_err_curve(
     else:
         plt.savefig(save_path, bbox_inches="tight")
 
+def plot_blk_spectrum(
+    spectrum_list,
+    param_names,
+    fig_name=None,
+    save_dir=None,
+):
+    if fig_name is not None:
+        if save_dir is None:
+            if not os.path.isdir("Figs"):
+                os.mkdir("Figs")
+            save_path = os.path.join("Figs", fig_name)
+        else:
+            save_path = os.path.join(save_dir, fig_name)
+    fig, axs = plt.subplots(4, 5, figsize=(12, 8))
+    plt.tight_layout()
+    for idx, spec in enumerate(spectrum_list):
+        col = idx % 5
+        row = idx // 5
+        axs[row][col].bar(np.arange(len(spec)), spec)
+        axs[row][col].set_title(f"{param_names[idx]}")
+    if fig_name is None:
+        plt.show()
+    else:
+        plt.savefig(save_path, bbox_inches="tight")
 
 def plot_sharpness_curve(
     sharpness_arr,

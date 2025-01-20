@@ -13,6 +13,7 @@ from utils import (
     mask_get_given_starts,
     plot_err_over_pos,
     plots_maker,
+    plot_blk_spectrum
 )
 
 warnings.simplefilter("ignore")
@@ -424,13 +425,22 @@ def train_infinite(
             if epoch % 1000 == 0:
                 blkdiag_hessian_train = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
                 avg_sharpness = sum([torch.trace(h) for h in blkdiag_hessian_train])
-                spectrum = torch.concat([torch.linalg.eigh(h)[0] for h in blkdiag_hessian_train])
+                blk_spectrums = [torch.linalg.eigh(h)[0] for h in blkdiag_hessian_train]
+                # spectrum = torch.concat(blk_spectrums)
+                
+                # plot spectrum
+                parameter_names = [name for name, _ in model.named_parameters()]
+                plot_blk_spectrum(
+                    blk_spectrums, 
+                    parameter_names, 
+                    fig_name=f"spectrum_epoch_{epoch}", 
+                    save_dir=config.out_dir
+                )
 
-                # inline plot spectrum
-                import matplotlib.pyplot as plt
-                plt.figure()
-                plt.bar(np.arange(len(spectrum)), spectrum)
-                plt.savefig(os.path.join(config.out_dir, f"spectrum_epoch_{epoch}"))
+                #import matplotlib.pyplot as plt
+                #plt.figure()
+                #plt.bar(np.arange(len(spectrum)), spectrum)
+                #plt.savefig(os.path.join(config.out_dir, f"spectrum_epoch_{epoch}"))
 
         if False: # directly compute Hessian trace
             if epoch % 1000 == 0:

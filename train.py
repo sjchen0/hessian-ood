@@ -429,18 +429,21 @@ def train_infinite(
                 # spectrum = torch.concat(blk_spectrums)
                 
                 # plot spectrum
-                parameter_names = [name for name, _ in model.named_parameters()]
-                plot_blk_spectrum(
-                    blk_spectrums, 
-                    parameter_names, 
-                    fig_name=f"spectrum_epoch_{epoch}", 
-                    save_dir=config.out_dir
-                )
+                # parameter_names = [name for name, _ in model.named_parameters()]
+                # plot_blk_spectrum(
+                #    blk_spectrums, 
+                #    parameter_names, 
+                #    fig_name=f"spectrum_epoch_{epoch}", 
+                #    save_dir=config.out_dir
+                # )
 
-                #import matplotlib.pyplot as plt
-                #plt.figure()
-                #plt.bar(np.arange(len(spectrum)), spectrum)
-                #plt.savefig(os.path.join(config.out_dir, f"spectrum_epoch_{epoch}"))
+                import matplotlib.pyplot as plt
+                spectrum = torch.concat(blk_spectrums)
+                plt.figure()
+                plt.hist(spectrum, 100)
+                plt.yscale('log')
+                # plt.bar(np.arange(len(spectrum)), spectrum)
+                plt.savefig(os.path.join(config.out_dir, f"spectrum_hist_epoch_{epoch}"))
 
         if False: # directly compute Hessian trace
             if epoch % 1000 == 0:

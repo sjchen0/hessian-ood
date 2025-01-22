@@ -421,21 +421,21 @@ def train_infinite(
                 print(sharpness)
 
 
-        if True: # compute block-diagonal Hessian
-            if epoch % 1000 == 0:
+        if False: # compute block-diagonal Hessian
+            if (epoch % 100 == 0 and 1000 <= epoch <= 2000) or epoch in [0,700]:
                 blkdiag_hessian_train = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
                 avg_sharpness = sum([torch.trace(h) for h in blkdiag_hessian_train])
                 blk_spectrums = [torch.linalg.eigh(h)[0] for h in blkdiag_hessian_train]
                 # spectrum = torch.concat(blk_spectrums)
                 
                 # plot spectrum
-                # parameter_names = [name for name, _ in model.named_parameters()]
-                # plot_blk_spectrum(
-                #    blk_spectrums, 
-                #    parameter_names, 
-                #    fig_name=f"spectrum_epoch_{epoch}", 
-                #    save_dir=config.out_dir
-                # )
+                parameter_names = [name for name, _ in model.named_parameters()]
+                plot_blk_spectrum(
+                   blk_spectrums, 
+                   parameter_names, 
+                   fig_name=f"spectrum_epoch_{epoch}", 
+                   save_dir=config.out_dir
+                )
 
                 import matplotlib.pyplot as plt
                 spectrum = torch.concat(blk_spectrums)
@@ -445,10 +445,12 @@ def train_infinite(
                 # plt.bar(np.arange(len(spectrum)), spectrum)
                 plt.savefig(os.path.join(config.out_dir, f"spectrum_hist_epoch_{epoch}"))
 
-        if False: # directly compute Hessian trace
-            if epoch % 1000 == 0:
+        if True: # directly compute Hessian trace
+            if epoch % 1000 == 0: # (epoch % 100 == 0 and 1000 <= epoch <= 2000) or epoch in [0,700]:
                 sharpness_trace = get_trace_hessian(model, criterion, src=src, dataset=train_dataset)
                 avg_sharpness = sum(sharpness_trace) / len(sharpness_trace)
+                # scale the sharpness by model weight
+                avg_sharpness *= sum([torch.norm(p).item()**2 for p in model.parameters()])
 
         sharpness_arr[epoch] = avg_sharpness
 

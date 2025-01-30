@@ -190,7 +190,7 @@ def get_robustness(model, criterion, **kwargs):
     num_perturb = kwargs['num_perturb']
     r_perturb = kwargs['r_perturb']
 
-    data_sample_size = 3
+    data_sample_size = kwargs['data_sample_size']
     indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
 
     names = list(n for n, _ in model.named_parameters())
@@ -481,7 +481,8 @@ def train_infinite(
                 avg_sharpness *= sum([torch.norm(p).item()**2 for p in model.parameters()])
 
         if True:
-            avg_sharpness = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=10, r_perturb=1e-3)
+            if epoch % 50 == 0:
+                avg_sharpness = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20)
 
         sharpness_arr[epoch] = avg_sharpness
 

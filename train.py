@@ -54,7 +54,6 @@ def get_loss(model, criterion, src):
 
 
 from functorch import hessian
-from torch.nn.utils import stateless
 
 def get_hessian(model, criterion, **kwargs):
     '''
@@ -87,7 +86,7 @@ def get_hessian(model, criterion, **kwargs):
         src = dataset[idx][0]
 
         def batch_loss(params):
-            output = stateless.functional_call(model, {n: p for n, p in zip(names, params)}, src)
+            output = torch.func.functional_call(model, {n: p for n, p in zip(names, params)}, src)
             vocab_size = output.size(-1)
             loss = criterion(
                 output[:, :-1].contiguous().view(-1, vocab_size),
@@ -186,7 +185,37 @@ def get_trace_hessian(model, criterion, **kwargs):
     model.zero_grad()
     return H_traces
 
+def get_robustness(model, criterion, **kwargs):
+    dataset = kwargs['dataset']
+    num_perturb = kwargs['num_perturb']
+    r_perturb = kwargs['r_perturb']
 
+    data_sample_size = 3
+    indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
+
+    names = list(n for n, _ in model.named_parameters())
+
+    def batch_loss(params, src):
+        output = torch.func.functional_call(model, {n: p for n, p in zip(names, params)}, src)
+        vocab_size = output.size(-1)
+        loss = criterion(
+            output[:, :-1].contiguous().view(-1, vocab_size),
+            src[:, 1:].contiguous().view(-1),
+        )
+        return loss
+
+    diff = []
+
+    for idx in indices:
+        params = list(model.parameters())
+        src = dataset[idx][0]
+        loss = batch_loss(params, src)
+        for trial in range(num_perturb):
+            params_perturb = [p + r_perturb * torch.randn_like(p) for p in params]
+            loss_perturb = batch_loss(params_perturb, src)
+            diff.append(loss_perturb - loss)
+    
+    return sum(diff) / len(diff)
 
 @torch.no_grad()
 def loss_err(model, criterion, src, mask):
@@ -442,15 +471,17 @@ def train_infinite(
                 plt.figure()
                 plt.hist(spectrum, 100)
                 plt.yscale('log')
-                # plt.bar(np.arange(len(spectrum)), spectrum)
                 plt.savefig(os.path.join(config.out_dir, f"spectrum_hist_epoch_{epoch}"))
 
-        if True: # directly compute Hessian trace
+        if False: # directly compute Hessian trace
             if epoch % 1000 == 0: # (epoch % 100 == 0 and 1000 <= epoch <= 2000) or epoch in [0,700]:
                 sharpness_trace = get_trace_hessian(model, criterion, src=src, dataset=train_dataset)
                 avg_sharpness = sum(sharpness_trace) / len(sharpness_trace)
                 # scale the sharpness by model weight
                 avg_sharpness *= sum([torch.norm(p).item()**2 for p in model.parameters()])
+
+        if True:
+            avg_sharpness = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=10, r_perturb=1e-3)
 
         sharpness_arr[epoch] = avg_sharpness
 

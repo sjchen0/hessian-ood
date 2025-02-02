@@ -23,7 +23,7 @@ rotary_theta: 10000
 max_seq_len: 64
 sample_size: 5000
 sample_size_test: 5000
-regime: "varied repetition"
+regime: "modular addition" # "varied repetition"
 distr: "two-level"
 rep_l: 10
 rep_h: 20

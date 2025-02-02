@@ -141,6 +141,67 @@ def gen_repetition_data(
     return data
 
 
+def gen_mod_add_data(
+    vocab,
+    max_seq_len,
+    sample_size,
+    distr=None,
+    pattern_pool_size=None,
+    patterns=None,
+    rep_l=11,
+    rep_h=20,
+    num_repeat=2,
+    return_lens=False,
+):
+
+    vocab_size = vocab.size(0)
+    p = torch.ones(vocab_size) / vocab_size if distr is None else distr
+
+    data = torch.multinomial(p, sample_size * max_seq_len, replacement=True).view(
+        sample_size, max_seq_len
+    )
+    lens = np.zeros(sample_size, dtype=int)
+    starts = np.zeros((sample_size, num_repeat), dtype=int)
+
+    if pattern_pool_size is not None and patterns is None:
+        # given the size of pattern pool, sample patterns from distribution p with length uniformly drawn from rep_l and repl_h
+        patterns = []
+        pattern_len_all = np.random.randint(
+            low=rep_l, high=rep_h, size=pattern_pool_size
+        )
+        for t in range(pattern_pool_size):
+            pattern = torch.multinomial(p, pattern_len_all[t], replacement=True)
+            patterns.append(pattern)
+
+    for i in range(sample_size):
+        if pattern_pool_size is None and patterns is None:
+            pattern_len = np.random.randint(low=rep_l, high=rep_h)
+            pattern_sample = torch.multinomial(p, pattern_len, replacement=True)
+        else:
+            pattern_sample = patterns[np.random.randint(low=0, high=pattern_pool_size)]
+            pattern_len = len(pattern_sample)
+
+        r = max_seq_len - pattern_len * num_repeat
+        gaps = torch.multinomial(torch.ones(r) / r, num_repeat, replacement=False)
+        gaps = torch.sort(gaps)[0]
+        gaps = torch.cat(
+            (
+                gaps[:1],
+                torch.tensor([gaps[i] - gaps[i - 1] for i in range(1, num_repeat)]),
+            )
+        )
+        start_pos = 0
+        for j in range(num_repeat):
+            start_pos = start_pos + gaps[j]
+            data[i, start_pos : (start_pos + pattern_len)] = pattern_sample if j == 0 else torch.cumsum(pattern_sample, dim=0) % vocab_size
+            starts[i, j] = start_pos
+            start_pos = start_pos + pattern_len
+        lens[i] = pattern_len
+
+    data = (data, lens, starts, patterns) if return_lens else data
+    return data
+
+
 def gen_simple_Aa_data(
     vocab,
     max_seq_len,

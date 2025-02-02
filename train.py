@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch import autograd
 from tqdm import tqdm
-from data import gen_repetition_data, gen_simple_data
+from data import gen_repetition_data, gen_simple_data, gen_mod_add_data
 from utils import (
     mask_get_along_axis,
     mask_get_given_starts,
@@ -258,6 +258,21 @@ def gen_simulated_data(
 
     elif regime == "varied repetition":
         src, lens, starts, patterns = gen_repetition_data(
+            vocab,
+            max_seq_len,
+            sample_size,
+            distr=distr,
+            pattern_pool_size=pool_size,
+            patterns=patterns,
+            return_lens=True,
+            rep_l=rep_l,
+            rep_h=rep_h,
+        )
+
+        return src.to(device), lens, starts, patterns
+    
+    elif regime == "modular addition":
+        src, lens, starts, patterns = gen_mod_add_data(
             vocab,
             max_seq_len,
             sample_size,

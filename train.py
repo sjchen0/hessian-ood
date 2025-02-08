@@ -189,11 +189,13 @@ def get_robustness(model, criterion, **kwargs):
     dataset = kwargs['dataset']
     num_perturb = kwargs['num_perturb']
     r_perturb = kwargs['r_perturb']
+    config = kwargs['config']
 
     data_sample_size = kwargs['data_sample_size']
     indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
 
     names = list(n for n, _ in model.named_parameters())
+
 
     def batch_loss(params, src):
         output = torch.func.functional_call(model, {n: p for n, p in zip(names, params)}, src)
@@ -206,17 +208,28 @@ def get_robustness(model, criterion, **kwargs):
 
     diff = []
     diff_by_blk = dict()
+    keywords = ['embed', 'fc'] + [str(i) for i in range(config.num_layers)]
+    for keyword in keywords:
+        diff_by_blk[keyword] = []
 
     for idx in indices:
         params = list(model.parameters())
         src = dataset[idx][0]
         loss = batch_loss(params, src)
+        for keyword in keywords:
+            for trial in range(num_perturb):
+                params_perturb = [p + r_perturb * torch.randn_like(p) if keyword in names[i] else p for i, p in enumerate(params)]
+                loss_perturb = batch_loss(params_perturb, src)
+                diff_by_blk[keyword].append(loss_perturb - loss)
         for trial in range(num_perturb):
             params_perturb = [p + r_perturb * torch.randn_like(p) for p in params]
             loss_perturb = batch_loss(params_perturb, src)
             diff.append(loss_perturb - loss)
     
-    return sum(diff) / len(diff)
+    for keyword in keywords:
+        diff_by_blk[keyword] = sum(diff_by_blk[keyword]) / len(diff_by_blk[keyword])
+
+    return sum(diff) / len(diff), diff_by_blk
 
 @torch.no_grad()
 def loss_err(model, criterion, src, mask):
@@ -388,6 +401,9 @@ def train_infinite(
 
     err_arr = np.zeros((num_epoch, 6))
     sharpness_arr = np.zeros((num_epoch,))
+    
+    diff_by_blk_summary = dict()
+
     err_arr_json = []
     criterion = (
         nn.CrossEntropyLoss(label_smoothing=0.1)
@@ -498,7 +514,14 @@ def train_infinite(
 
         if True:
             if epoch % 50 == 0:
-                avg_sharpness, sharpness_block = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20)
+                avg_sharpness, diff_by_blk = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
+
+        if len(diff_by_blk_summary) == 0:
+            for k in diff_by_blk.keys():
+                diff_by_blk_summary[k] = [diff_by_blk[k].item()]
+        else:
+            for k in diff_by_blk.keys():
+                diff_by_blk_summary[k].append(diff_by_blk[k].item())
 
         sharpness_arr[epoch] = avg_sharpness
 
@@ -564,7 +587,7 @@ def train_infinite(
         save_dir=config.out_dir,
     )
 
-    return model, err_arr, sharpness_arr, err_arr_json
+    return model, err_arr, sharpness_arr, diff_by_blk_summary, err_arr_json
 
 
 def train_finite(

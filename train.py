@@ -205,6 +205,7 @@ def get_robustness(model, criterion, **kwargs):
         return loss
 
     diff = []
+    diff_by_blk = dict()
 
     for idx in indices:
         params = list(model.parameters())
@@ -497,7 +498,7 @@ def train_infinite(
 
         if True:
             if epoch % 50 == 0:
-                avg_sharpness = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20)
+                avg_sharpness, sharpness_block = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20)
 
         sharpness_arr[epoch] = avg_sharpness
 

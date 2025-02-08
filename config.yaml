@@ -6,7 +6,7 @@ vocab_size: 8 # 32
 d_model: 32 # 64
 ff_dim: 256
 num_heads: 1
-num_layers: 2
+num_layers: 1
 
 # TF model variants
 linear_attn: False

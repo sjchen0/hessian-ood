@@ -192,8 +192,8 @@ def gen_mod_add_data(
         )
         start_pos = 0
         for j in range(num_repeat):
-            start_pos = start_pos + gaps[j]
-            data[i, start_pos : (start_pos + pattern_len)] = pattern_sample if j == 0 else torch.cumsum(pattern_sample, dim=0) % vocab_size
+            # start_pos = start_pos + gaps[j] comment this line for deterministic pattern location
+            data[i, start_pos : (start_pos + pattern_len)] = pattern_sample # if j == 0 else torch.cumsum(pattern_sample, dim=0) % vocab_size
             starts[i, j] = start_pos
             start_pos = start_pos + pattern_len
         lens[i] = pattern_len

@@ -2,8 +2,8 @@
 seed: 2026
 
 # model
-vocab_size: 8 # 32
-d_model: 32 # 64
+vocab_size: 32 # 32
+d_model: 64 # 64
 ff_dim: 256
 num_heads: 1
 num_layers: 2
@@ -23,7 +23,7 @@ rotary_theta: 10000
 max_seq_len: 64
 sample_size: 5000
 sample_size_test: 5000
-regime: "modular addition" # "varied repetition"
+regime: "varied repetition" # "varied repetition"
 distr: "two-level"
 rep_l: 10
 rep_h: 20
@@ -38,10 +38,11 @@ use_wd: True
 schedule: "constant"
 fresh_sample: True
 label_smoothing: False
-lr: 0.005 # 0.001
+lr: 0.001 # 0.001
 wd: 0.0005
 batch_size: 50
-num_epoch: 10000 # 10000
+num_epoch: 20000 # 10000
+sharpness_step: 50
 
 # logging
 wandb_log: False

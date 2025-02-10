@@ -150,7 +150,7 @@ def get_trace_hessian(model, criterion, **kwargs):
     Return: Trace of Hessian evaluated on the loss of randomly drawn data samples.
     '''
     dataset = kwargs['dataset']
-    data_sample_size = 3
+    data_sample_size = 5
     indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
 
     H_traces = []
@@ -190,6 +190,37 @@ def get_robustness(model, criterion, **kwargs):
     num_perturb = kwargs['num_perturb']
     r_perturb = kwargs['r_perturb']
     config = kwargs['config']
+    data_sample_size = kwargs['data_sample_size']
+    indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
+    names = list(n for n, _ in model.named_parameters())
+
+    def batch_loss(params, src):
+        output = torch.func.functional_call(model, {n: p.detach() for n, p in zip(names, params)}, src)
+        vocab_size = output.size(-1)
+        loss = criterion(
+            output[:, :-1].contiguous().view(-1, vocab_size),
+            src[:, 1:].contiguous().view(-1),
+        )
+        return loss
+
+    diff = []
+
+    for idx in indices:
+        params = list(model.parameters())
+        src = dataset[idx][0]
+        loss = batch_loss(params, src)
+        for trial in range(num_perturb):
+            params_perturb = [p + r_perturb * torch.randn_like(p) for p in params]
+            loss_perturb = batch_loss(params_perturb, src)
+            diff.append(loss_perturb - loss)
+
+    return diff
+
+def get_robustness_blk(model, criterion, **kwargs):
+    dataset = kwargs['dataset']
+    num_perturb = kwargs['num_perturb']
+    r_perturb = kwargs['r_perturb']
+    config = kwargs['config']
 
     data_sample_size = kwargs['data_sample_size']
     indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
@@ -198,7 +229,7 @@ def get_robustness(model, criterion, **kwargs):
 
 
     def batch_loss(params, src):
-        output = torch.func.functional_call(model, {n: p for n, p in zip(names, params)}, src)
+        output = torch.func.functional_call(model, {n: p.detach() for n, p in zip(names, params)}, src)
         vocab_size = output.size(-1)
         loss = criterion(
             output[:, :-1].contiguous().view(-1, vocab_size),
@@ -401,7 +432,7 @@ def train_infinite(
 
     err_arr = np.zeros((num_epoch, 6))
     sharpness_arr = np.zeros((num_epoch,))
-    
+    trial_sharpness_arr = np.zeros((num_epoch, 2000))
     diff_by_blk_summary = dict()
 
     err_arr_json = []
@@ -509,21 +540,30 @@ def train_infinite(
             if epoch % 1000 == 0: # (epoch % 100 == 0 and 1000 <= epoch <= 2000) or epoch in [0,700]:
                 sharpness_trace = get_trace_hessian(model, criterion, src=src, dataset=train_dataset)
                 avg_sharpness = sum(sharpness_trace) / len(sharpness_trace)
+                
                 # scale the sharpness by model weight
-                avg_sharpness *= sum([torch.norm(p).item()**2 for p in model.parameters()])
+                # avg_sharpness *= sum([torch.norm(p).item()**2 for p in model.parameters()])
+
+        if False:
+            if epoch % config.sharpness_step == 0:
+                avg_sharpness, diff_by_blk = get_robustness_blk(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
 
         if True:
-            if epoch % 50 == 0:
-                avg_sharpness, diff_by_blk = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
+            if (epoch % config.sharpness_step == 0 and 10000 > epoch >= 1000) or (epoch % 10 == 0 and epoch < 1000) or (epoch % 200 == 0 and epoch >= 10000):
+                diff = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
+                avg_sharpness = sum(diff) / len(diff)
 
+        '''
         if len(diff_by_blk_summary) == 0:
             for k in diff_by_blk.keys():
                 diff_by_blk_summary[k] = [diff_by_blk[k].item()]
         else:
             for k in diff_by_blk.keys():
                 diff_by_blk_summary[k].append(diff_by_blk[k].item())
+        '''
 
         sharpness_arr[epoch] = avg_sharpness
+        trial_sharpness_arr[epoch] = np.array([d.item() for d in diff])
 
         err_arr[epoch, :] = [
             loss_train.item(),
@@ -586,6 +626,8 @@ def train_infinite(
         src_labels=["train", "test", "ood"],
         save_dir=config.out_dir,
     )
+
+    np.save("out/trial_diff.npy", trial_sharpness_arr)
 
     return model, err_arr, sharpness_arr, diff_by_blk_summary, err_arr_json
 

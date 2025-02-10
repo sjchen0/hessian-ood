@@ -7,6 +7,7 @@ import yaml
 from model import TFModel
 from train import train_finite, train_infinite
 from utils import create_folder, fix_random_seed, plot_err_curve, plot_sharpness_curve
+import numpy as np
 
 print(torch.__version__)
 
@@ -104,7 +105,7 @@ def main(**kwargs):
     )
     for k in diff_by_blk_summary.keys():
         plot_sharpness_curve(
-            diff_by_blk_summary[k],
+            np.array(diff_by_blk_summary[k]),
             fig_name=f"diff_by_blk_{k}",
             save_dir=config.out_dir
         )

@@ -549,7 +549,7 @@ def train_infinite(
                 avg_sharpness, diff_by_blk = get_robustness_blk(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
 
         if True:
-            if (epoch % config.sharpness_step == 0 and 10000 > epoch >= 1000) or (epoch % 10 == 0 and epoch < 1000) or (epoch % 200 == 0 and epoch >= 10000):
+            if epoch % config.sharpness_step == 0:
                 diff = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
                 avg_sharpness = sum(diff) / len(diff)
 

@@ -2,7 +2,20 @@ import torch
 import numpy as np
 import data
 import utils
+from torch import autograd
+from tqdm import tqdm
 
+@torch.no_grad()
+def get_loss(model, criterion, src):
+    output = model(src)
+    vocab_size = output.size(-1)
+    loss = criterion(
+        output[:, :-1].contiguous().view(-1, vocab_size),
+        src[:, 1:].contiguous().view(-1),
+    )
+    return loss
+
+@torch.no_grad()
 def get_robustness(model, criterion, **kwargs):
     dataset = kwargs['dataset']
     num_perturb = kwargs['num_perturb']
@@ -27,13 +40,57 @@ def get_robustness(model, criterion, **kwargs):
     for idx in indices:
         params = list(model.parameters())
         src = dataset[idx][0]
+        # print(src.device)
+        # print([p.device for p in params])
         loss = batch_loss(params, src)
         for trial in range(num_perturb):
-            params_perturb = [p + r_perturb * torch.randn_like(p) if names[i] == perturb_name else p for i, p in enumerate(params)]
+            params_perturb = [p + r_perturb * torch.randn_like(p) if names[i] in perturb_name else p for i, p in enumerate(params)]
+            # print([p.device for p in params_perturb])
             loss_perturb = batch_loss(params_perturb, src)
-            diff.append(loss_perturb - loss)
+            diff.append((loss_perturb - loss).cpu())
 
     return {0: diff}
+
+def get_blkdiag_hessian(model, criterion, **kwargs):
+    '''
+    Compute a block-diagonal approximation to the Hessian, as full Hessian is large.
+    Return: A list of 2x2 tensors, each is the Hessian with respect to a parameter group.
+    '''
+    dataset = kwargs['dataset']
+    data_sample_size = kwargs['data_sample_size']
+    indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
+
+    H = []
+
+    for idx_count, idx in enumerate(indices):
+        src = dataset[idx][0]
+        output = model(src)
+        vocab_size = output.size(-1)
+        loss = criterion(
+            output[:, :-1].contiguous().view(-1, vocab_size),
+            src[:, 1:].contiguous().view(-1),
+        )
+        params = tuple(model.parameters())
+        grads = autograd.grad(loss, params, create_graph=True)
+        names = [n for n, _ in model.named_parameters()]
+        # process = psutil.Process()
+
+        for i, (grad, p) in enumerate(zip(grads, params)):
+            if names[i] == "h.1.mha.W_k.weight":
+                grad = grad.reshape(-1)
+                d = len(grad)
+                dg = torch.zeros((d, d))
+                for j, g in enumerate(grad):
+                    g2 = autograd.grad(g, p, retain_graph=True, create_graph=False)[0].view(-1)
+                    dg[j] = g2
+                # print(f"Memory usage: {process.memory_info().vms / 1024**2} MB")
+                if idx_count == 0:
+                    H.append(dg / data_sample_size)
+                else:
+                    H[0] += dg / data_sample_size
+        
+    model.zero_grad()
+    return H
 
 def get_robustness_subspace(model, criterion, **kwargs):
     dataset = kwargs['dataset']
@@ -62,16 +119,18 @@ def get_robustness_subspace(model, criterion, **kwargs):
         loss = batch_loss(params, src)
         for trial in range(num_perturb):
             for i, p in enumerate(params):
-                if names[i] == perturb_name:
+                if names[i] == "embed.embed.weight":
+                    Ue, se, Vte = torch.linalg.svd(p.detach())
+                if names[i] in perturb_name:
                     U, s, Vt = torch.linalg.svd(p.detach())
                     subspace_perturbations = perturb_orthogonal_subspace(p.detach(), r_perturb, U, Vt)
             for j in range(len(subspace_perturbations)):
-                params_perturb = [subspace_perturbations[j] if names[i] == perturb_name else p for i, p in enumerate(params)]
+                params_perturb = [subspace_perturbations[j] if names[i] in perturb_name else p for i, p in enumerate(params)]
                 loss_perturb = batch_loss(params_perturb, src)
                 if j not in diff.keys():
-                    diff[j] = [loss_perturb - loss]
+                    diff[j] = [(loss_perturb - loss).cpu()]
                 else:
-                    diff[j].append(loss_perturb - loss)
+                    diff[j].append((loss_perturb - loss).cpu())
 
     return diff
 
@@ -86,22 +145,46 @@ def perturb_subspace(W, r_perturb):
     return ret
 
 def perturb_orthogonal_subspace(W, r_perturb, U, Vt):
+    rets = []
     noise = torch.randn_like(W)
     UVt = torch.permute(torch.tensordot(U, Vt, dims=0), (1,2,0,3))
     proj = torch.sum(UVt * noise[None, None, :], dim=(2,3)) # computing a matrix whose element is <noise, u_iv_j^T>
     diag_proj = torch.zeros_like(proj)
     diag_proj[range(min(proj.shape[0], proj.shape[1])), range(min(proj.shape[0], proj.shape[1]))] = proj[range(min(proj.shape[0], proj.shape[1])), range(min(proj.shape[0], proj.shape[1]))]
     proj = U @ diag_proj @ Vt
-    ret1 = W + r_perturb * proj
+    rets.append(W + r_perturb * proj)
+
+    '''
+    for i in range(U.shape[1]):
+        order_0 = [(j + i) % U.shape[1] for j in range(U.shape[1])]
+        order_1 = range(U.shape[1])
+        noise = torch.randn_like(W)
+        proj = torch.sum(UVt * noise[None, None, :], dim=(2,3)) # computing a matrix whose element is <noise, u_iv_j^T>
+        diag_proj = torch.zeros_like(proj)
+        diag_proj[order_0, order_1] = proj[order_0, order_1]
+        proj = U @ diag_proj @ Vt
+        rets.append(W + r_perturb * proj)
+    '''
 
     noise = torch.randn_like(W)
+    # UVt = torch.permute(torch.tensordot(U, Vt, dims=0), (1,2,0,3))
     proj = torch.sum(UVt * noise[None, None, :], dim=(2,3)) # computing a matrix whose element is <noise, u_iv_j^T>
     diag_proj = torch.zeros_like(proj)
     diag_proj[range(min(proj.shape[0], proj.shape[1])), range(min(proj.shape[0], proj.shape[1]))] = proj[range(min(proj.shape[0], proj.shape[1])), range(min(proj.shape[0], proj.shape[1]))]
     proj = U @ diag_proj @ Vt
     err = noise - proj
-    ret2 = W + r_perturb * err
-    return (ret1, ret2)
+    rets.append(W + r_perturb * err)
+
+    return rets
+
+def perturb_coordinate(W, r_perturb):
+    rets = []
+    for i in range(W.shape[0]):
+        for j in range(W.shape[1]):
+            ret = W.clone()
+            ret[i,j] += r_perturb * torch.randn_like(ret[i,j])
+            rets.append(ret)
+    return rets
 
 def get_robustness_blk(model, criterion, **kwargs):
     dataset = kwargs['dataset']

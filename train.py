@@ -339,10 +339,14 @@ def train_infinite(
             if epoch % config.sharpness_step == 0:
                 avg_sharpness, diff_by_blk = get_robustness_blk(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
 
-        if True:
+        if False:
             if epoch % config.sharpness_step == 0:
                 diff = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
                 avg_sharpness = sum(diff) / len(diff)
+
+        if True:
+            if epoch % config.sharpness_step == 0:
+                get_outer_product_hess(model, criterion, src=src, dataset=train_dataset)
 
         '''
         if len(diff_by_blk_summary) == 0:

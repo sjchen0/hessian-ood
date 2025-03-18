@@ -160,19 +160,23 @@ def get_outer_product_hess(model, criterion, **kwargs):
         names = list(n for n, _ in model.named_parameters())
         params = tuple(model.parameters())
 
+        print("computing")
+
         dF_dW = jacobian(
             lambda par: torch.func.functional_call(model, {n: p for n, p in zip(names, par)}, src),
-            params,
-            create_graph=False
-        )
-
-        d2l_dF2 = hessian(
-            lambda x: criterion(x[:, :-1].contiguous().view(-1, vocab_size), src[:, 1:].contiguous().view(-1)),
-            params,
+            params.detach(),
             create_graph=False
         )
 
         print(len(dF_dW))
+
+        d2l_dF2 = hessian(
+            lambda x: criterion(x[:, :-1].contiguous().view(-1, vocab_size), src[:, 1:].contiguous().view(-1)),
+            output.detach(),
+            create_graph=False
+        )
+
+        print(len(d2l_dF2))
 
 
 def get_robustness(model, criterion, **kwargs):

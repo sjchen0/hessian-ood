@@ -32,7 +32,7 @@ pool_size: null
 sig: 2
 
 # training
-device: "cpu"
+device: "cuda"
 fancy_opt: False
 use_wd: True
 schedule: "constant"
@@ -41,14 +41,14 @@ label_smoothing: False
 lr: 0.001 # 0.001
 wd: 0.0005
 batch_size: 50
-num_epoch: 30000 # 10000
-sharpness_step: 30000
+num_epoch: 50000 # 10000
+sharpness_step: 1000
 
 # logging
 wandb_log: False
 plot_attn_every_epoch: 100
 print_output: False
-n_save: 500
+n_save: 1 # 500
 up_to_first_save: False
 
 # eval

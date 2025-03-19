@@ -186,7 +186,7 @@ def get_outer_product_hess(model, criterion, **kwargs):
             H_out_sample = [jac.T @ d2l_dF2 @ jac for jac in dF_dW]
 
             if H_out is None:
-                H_out = H_out_sample / len(indices) / len(src)
+                H_out = [h / len(indices) / len(src) for h in H_out_sample]
             else:
                 H_out = [H + h / len(indices) / len(src) for H, h in zip(H_out, H_out_sample)]
     

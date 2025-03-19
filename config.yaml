@@ -32,7 +32,7 @@ pool_size: null
 sig: 2
 
 # training
-device: "cuda"
+device: "cpu"
 fancy_opt: False
 use_wd: True
 schedule: "constant"

@@ -147,37 +147,50 @@ def get_outer_product_hess(model, criterion, **kwargs):
     data_sample_size = 3
     indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
 
-    H = []
+    H_out = None
 
     for idx_count, idx in enumerate(indices):
-        src = dataset[idx][0]
-        output = model(src)
-        vocab_size = output.size(-1)
-        loss = criterion(
-            output[:, :-1].contiguous().view(-1, vocab_size),
-            src[:, 1:].contiguous().view(-1),
-        )
-        names = list(n for n, _ in model.named_parameters())
-        params = tuple(model.parameters())
+        for b in range(len(dataset[0][0])):
+            src = dataset[idx][0][b:b+1]
+            output = model(src)
+            vocab_size = output.size(-1)
+            loss = criterion(
+                output[:, :-1].contiguous().view(-1, vocab_size),
+                src[:, 1:].contiguous().view(-1),
+            )
+            names = list(n for n, _ in model.named_parameters())
+            params = tuple(model.parameters())
 
-        print("computing")
+            print("computing")
 
-        dF_dW = jacobian(
-            lambda par: torch.func.functional_call(model, {n: p for n, p in zip(names, par)}, src),
-            params.detach(),
-            create_graph=False
-        )
+            dF_dW = jacobian(
+                lambda *par: torch.func.functional_call(model, {n: p for n, p in zip(names, par)}, src),
+                params,
+                create_graph=False
+            )
 
-        print(len(dF_dW))
+            print(len(dF_dW))
 
-        d2l_dF2 = hessian(
-            lambda x: criterion(x[:, :-1].contiguous().view(-1, vocab_size), src[:, 1:].contiguous().view(-1)),
-            output.detach(),
-            create_graph=False
-        )
+            dF_dW = [jac.flatten(3,).flatten(0,2) for jac in dF_dW]
 
-        print(len(d2l_dF2))
+            d2l_dF2 = hessian(
+                lambda x: criterion(x[:, :-1].contiguous().view(-1, vocab_size), src[:, 1:].contiguous().view(-1)),
+                output.detach(),
+                create_graph=False
+            )
 
+            print(len(d2l_dF2))
+
+            d2l_dF2 = d2l_dF2.flatten(3,5).flatten(0,2)
+
+            H_out_sample = [jac.T @ d2l_dF2 @ jac for jac in dF_dW]
+
+            if H_out is None:
+                H_out = H_out_sample / len(indices) / len(src)
+            else:
+                H_out = [H + h / len(indices) / len(src) for H, h in zip(H_out, H_out_sample)]
+    
+    return H_out
 
 def get_robustness(model, criterion, **kwargs):
     dataset = kwargs['dataset']

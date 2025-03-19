@@ -256,7 +256,7 @@ def train_infinite(
         )
         train_dataset.append((src, lens_train, starts_train, _, M))
 
-    torch.save(train_dataset, "train_dataset.pt")
+    # torch.save(train_dataset, "train_dataset.pt")
 
     for epoch in tqdm(range(num_epoch)):
         model.train()

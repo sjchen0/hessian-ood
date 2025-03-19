@@ -345,7 +345,7 @@ def train_infinite(
                 avg_sharpness = sum(diff) / len(diff)
 
         if config.sharpness_task == "outer-product-Hessian":
-            if epoch % config.sharpness_step == 0:
+            if epoch % config.sharpness_step == 0 and epoch > 5997:
                 H_out = get_outer_product_hess(model, criterion, src=src, dataset=train_dataset)
                 H = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
                 torch.save((H_out, H), f"out/out-hess-{epoch}.pt")

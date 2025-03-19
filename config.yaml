@@ -15,7 +15,7 @@ mlp: False
 dropout: 0.1
 norm: True
 output_norm: False
-trainable_norm: True
+trainable_norm: False
 pos: "rotary"
 rotary_theta: 10000
 
@@ -32,7 +32,7 @@ pool_size: null
 sig: 2
 
 # training
-device: "cpu"
+device: "cuda"
 fancy_opt: False
 use_wd: True
 schedule: "constant"
@@ -41,8 +41,7 @@ label_smoothing: False
 lr: 0.001 # 0.001
 wd: 0.0005
 batch_size: 50
-num_epoch: 50000 # 10000
-sharpness_step: 1000
+num_epoch: 10000 # 10000
 
 # logging
 wandb_log: False
@@ -57,3 +56,7 @@ ignore_burning: 4
 
 # IO
 out_dir: "out"
+
+# sharpness task
+sharpness_step: 1000
+sharpness_task: "outer-product-Hessian"

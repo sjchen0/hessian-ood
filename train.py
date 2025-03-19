@@ -344,9 +344,12 @@ def train_infinite(
                 diff = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
                 avg_sharpness = sum(diff) / len(diff)
 
-        if True:
+        if config.sharpness_task == "outer-product-Hessian":
             if epoch % config.sharpness_step == 0:
-                get_outer_product_hess(model, criterion, src=src, dataset=train_dataset)
+                H_out = get_outer_product_hess(model, criterion, src=src, dataset=train_dataset)
+                H = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
+                torch.save((H_out, H), f"out/out-hess-{epoch}.pt")
+
 
         '''
         if len(diff_by_blk_summary) == 0:
@@ -357,8 +360,8 @@ def train_infinite(
                 diff_by_blk_summary[k].append(diff_by_blk[k].item())
         '''
 
-        sharpness_arr[epoch] = avg_sharpness
-        trial_sharpness_arr[epoch] = np.array([d.item() for d in diff])
+        #sharpness_arr[epoch] = avg_sharpness
+        #trial_sharpness_arr[epoch] = np.array([d.item() for d in diff])
 
         err_arr[epoch, :] = [
             loss_train.item(),
@@ -422,9 +425,9 @@ def train_infinite(
         save_dir=config.out_dir,
     )
 
-    np.save("out/trial_diff.npy", trial_sharpness_arr)
+    # np.save("out/trial_diff.npy", trial_sharpness_arr)
 
-    return model, err_arr, sharpness_arr, diff_by_blk_summary, err_arr_json
+    return model, err_arr, err_arr_json
 
 
 def train_finite(

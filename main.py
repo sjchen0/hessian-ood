@@ -68,7 +68,7 @@ def main(**kwargs):
     scheduler = make_scheduler(optimizer, config)
 
     if config.fresh_sample:
-        model, err_arr, sharpness_arr, diff_by_blk_summary, err_arr_json = train_infinite(
+        model, err_arr, err_arr_json = train_infinite(
             model=model,
             config=config,
             optimizer=optimizer,
@@ -98,6 +98,7 @@ def main(**kwargs):
         plot_train=not config.fresh_sample,
         log_training_time=config.fresh_sample,
     )
+    '''
     plot_sharpness_curve(
         sharpness_arr,
         fig_name="sharpness_curve",
@@ -109,6 +110,7 @@ def main(**kwargs):
             fig_name=f"diff_by_blk_{k}",
             save_dir=config.out_dir
         )
+    '''
 
     json.dump(
         err_arr_json,

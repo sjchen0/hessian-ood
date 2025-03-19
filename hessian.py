@@ -160,31 +160,19 @@ def get_outer_product_hess(model, criterion, **kwargs):
             )
             names = list(n for n, _ in model.named_parameters())
             params = tuple(model.parameters())
-
-            print("computing")
-
             dF_dW = jacobian(
                 lambda *par: torch.func.functional_call(model, {n: p for n, p in zip(names, par)}, src),
                 params,
                 create_graph=False
             )
-
-            print(len(dF_dW))
-
             dF_dW = [jac.flatten(3,).flatten(0,2) for jac in dF_dW]
-
             d2l_dF2 = hessian(
                 lambda x: criterion(x[:, :-1].contiguous().view(-1, vocab_size), src[:, 1:].contiguous().view(-1)),
                 output.detach(),
                 create_graph=False
             )
-
-            print(len(d2l_dF2))
-
             d2l_dF2 = d2l_dF2.flatten(3,5).flatten(0,2)
-
             H_out_sample = [jac.T @ d2l_dF2 @ jac for jac in dF_dW]
-
             if H_out is None:
                 H_out = [h / len(indices) / len(src) for h in H_out_sample]
             else:

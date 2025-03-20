@@ -18,7 +18,7 @@ def plot_outer_product_hess():
     plt.plot(tr_H, '-o', label='tr(H)')
     # plt.plot(tr_H - tr_H_out, '-o', label='tr(H_{functional})')
     plt.legend()
-    plt.show()
+    plt.savefig("out/outer_product_hess.png")
 
 if __name__ == "__main__":
     plot_outer_product_hess()

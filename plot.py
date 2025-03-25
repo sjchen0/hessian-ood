@@ -3,7 +3,7 @@ import torch
 import numpy as np
 
 def plot_outer_product_hess():
-    epochs = list(range(0, 5001, 1000))
+    epochs = list(range(0, 13001, 1000))
     tr_H_out = []
     tr_H = []
     for epoch in epochs:
@@ -14,8 +14,8 @@ def plot_outer_product_hess():
     tr_H = np.array(tr_H)
 
     plt.figure()
-    plt.plot(tr_H_out, '-o', label="$tr(H_{out})$")
-    plt.plot(tr_H, '-o', label='tr(H)')
+    plt.plot(epochs, tr_H_out, '-o', label="$tr(H_{out})$")
+    plt.plot(epochs, tr_H, '-o', label='tr(H)')
     # plt.plot(tr_H - tr_H_out, '-o', label='tr(H_{functional})')
     plt.legend()
     plt.savefig("out/outer_product_hess.png")

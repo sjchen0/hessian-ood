@@ -180,6 +180,55 @@ def get_outer_product_hess(model, criterion, **kwargs):
     
     return H_out
 
+
+def get_outer_product_hess_decompose(model, criterion, **kwargs):
+    '''
+    Based on Gauss-Newton decomposition, compute the outer-product hessian
+    (\partial F / \partial W) ^ T (\partial^2 l / \partial F^2) (\partial F / \partial W)
+    '''
+    dataset = kwargs['dataset']
+    data_sample_size = 3
+    indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
+
+    H_out = None
+    dF_dW_total = []
+    d2l_dF2_total = []
+
+    for idx_count, idx in enumerate(indices):
+        for b in range(len(dataset[0][0])):
+            src = dataset[idx][0][b:b+1]
+            output = model(src)
+            vocab_size = output.size(-1)
+            loss = criterion(
+                output[:, :-1].contiguous().view(-1, vocab_size),
+                src[:, 1:].contiguous().view(-1),
+            )
+            names = list(n for n, _ in model.named_parameters())
+            params = tuple(model.parameters())
+            dF_dW = jacobian(
+                lambda *par: torch.func.functional_call(model, {n: p for n, p in zip(names, par)}, src),
+                params,
+                create_graph=False
+            )
+            dF_dW = [jac.flatten(3,).flatten(0,2) for jac in dF_dW]
+            d2l_dF2 = hessian(
+                lambda x: criterion(x[:, :-1].contiguous().view(-1, vocab_size), src[:, 1:].contiguous().view(-1)),
+                output.detach(),
+                create_graph=False
+            )
+            d2l_dF2 = d2l_dF2.flatten(3,5).flatten(0,2)
+
+            dF_dW_total.append(dF_dW)
+            d2l_dF2_total.append(d2l_dF2)
+
+            H_out_sample = [jac.T @ d2l_dF2 @ jac for jac in dF_dW]
+            if H_out is None:
+                H_out = [h / len(indices) / len(src) for h in H_out_sample]
+            else:
+                H_out = [H + h / len(indices) / len(src) for H, h in zip(H_out, H_out_sample)]
+    
+    return H_out, dF_dW_total, d2l_dF2_total
+
 def get_robustness(model, criterion, **kwargs):
     dataset = kwargs['dataset']
     num_perturb = kwargs['num_perturb']

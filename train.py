@@ -350,6 +350,12 @@ def train_infinite(
                 H = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
                 torch.save((H_out, H), f"out/out-hess-{epoch}.pt")
 
+        if config.sharpness_task == "outer-product-Hessian-decompose":
+            if epoch % config.sharpness_step == 0 and epoch > 5997:
+                H_out = get_outer_product_hess_decompose(model, criterion, src=src, dataset=train_dataset)
+                H = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
+                torch.save((H_out, H), f"out/out-hess-decompose-{epoch}.pt")
+
 
         '''
         if len(diff_by_blk_summary) == 0:

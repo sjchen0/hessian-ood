@@ -59,4 +59,4 @@ out_dir: "out"
 
 # sharpness task
 sharpness_step: 1000
-sharpness_task: "outer-product-Hessian-decompose"
+sharpness_task: "outer-product-Hessian-random-alignment"

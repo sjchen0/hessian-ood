@@ -33,11 +33,14 @@ def plot_outer_product_hess_decompose():
         norms = []
         traces = []
         for dF_dW, d2l_dF2 in zip(dF_dW_total, d2l_dF2_total):
-            norm = sum([torch.linalg.norm(dF_dW_item).item() for dF_dW_item in dF_dW])
+            norm = [torch.linalg.norm(dF_dW_item).item() for dF_dW_item in dF_dW]
             norms.append(norm)
             trace = torch.trace(d2l_dF2)
             traces.append(trace)
-        norm_dF_dW.append(sum(norms) / len(norms))
+        
+        norms = np.array(norms)
+        norms = np.mean(norms, axis=0)
+        norm_dF_dW.append(norms)
         tr_d2l_dF2.append(sum(traces) / len(traces))
 
         tr_H_out.append(sum(map(lambda h: torch.trace(h)/50, H_out)).item())
@@ -50,14 +53,19 @@ def plot_outer_product_hess_decompose():
     plt.figure()
     plt.plot(epochs, tr_H_out, '-o', label="$tr(H_{out})$")
     plt.plot(epochs, tr_H, '-o', label='tr(H)')
-    plt.plot(epochs, norm_dF_dW, '-o', label='$\|dF/dW\|$')
+    plt.plot(epochs, np.sum(norm_dF_dW, axis=1), '-o', label='$\|dF/dW\|$')
     plt.plot(epochs, tr_d2l_dF2, '-o', label='$tr(d^2l/dF^2)$')
     plt.legend()
     plt.savefig("out/outer_product_hess_decompose.png")
 
     plt.figure()
-    plt.plot(epochs, tr_d2l_dF2, '-o')
-    plt.savefig("out/tr_d2l_dF2.png")
+    names = ['embed.embed.weight', 'h.0.mha.W_q.weight', 'h.0.mha.W_q.bias', 'h.0.mha.W_k.weight', 'h.0.mha.W_k.bias', 'h.0.mha.W_v.weight', 'h.0.mha.W_v.bias', 'h.0.mha.W_o.weight', 'h.0.mha.W_o.bias', 'h.1.mha.W_q.weight', 'h.1.mha.W_q.bias', 'h.1.mha.W_k.weight', 'h.1.mha.W_k.bias', 'h.1.mha.W_v.weight', 'h.1.mha.W_v.bias', 'h.1.mha.W_o.weight', 'h.1.mha.W_o.bias', 'fc.weight', 'fc.bias']
+    for norms_block, name in zip(norm_dF_dW.T, names):
+        if "bias" in name:
+            continue
+        plt.plot(epochs, norms_block, '-o', label=name)
+    plt.legend()
+    plt.savefig("out/outer_product_hess_block.png")
 
 if __name__ == "__main__":
     plot_outer_product_hess_decompose()

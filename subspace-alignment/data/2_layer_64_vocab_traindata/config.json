@@ -22,7 +22,7 @@
     "ood_len_pattern": 25,
     "pool_size": null,
     "sig": 2,
-    "device": "cuda",
+    "device": "cpu",
     "fancy_opt": false,
     "use_wd": true,
     "schedule": "constant",

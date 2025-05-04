@@ -1,6 +1,7 @@
 # importing required libraries
 import os
 import warnings
+import math
 import psutil
 import numpy as np
 import torch
@@ -357,11 +358,11 @@ def train_infinite(
                 torch.save((H_out, H), f"out/out-hess-decompose-{epoch}.pt")
 
         if config.sharpness_task == "outer-product-Hessian-random-alignment":
-            if epoch < 10:
+            if 2 < epoch < 10:
                 # random model
                 state_dict = model.state_dict().copy()
                 for name in model.state_dict():
-                    state_dict[name] = torch.randn_like(model.state_dict()[name])
+                    state_dict[name] = torch.randn_like(model.state_dict()[name]) / math.sqrt(config.d_model)
                 model.load_state_dict(state_dict)
                 H_out = get_outer_product_hess_decompose(model, criterion, src=src, dataset=train_dataset)
                 H = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
@@ -371,7 +372,7 @@ def train_infinite(
                 state_dict = model.state_dict().copy()
                 for name in model.state_dict():
                     if name not in ['h.1.mha.W_q.weight', 'h.1.mha.W_k.weight']:
-                        state_dict[name] = torch.randn_like(model.state_dict()[name])
+                        state_dict[name] = torch.randn_like(model.state_dict()[name]) / math.sqrt(config.d_model)
                     else:
                         if name == 'h.1.mha.W_q.weight':
                             rot, _ = torch.linalg.qr(torch.randn_like(model.state_dict()[name]))
@@ -382,7 +383,7 @@ def train_infinite(
                 H_out = get_outer_product_hess_decompose(model, criterion, src=src, dataset=train_dataset)
                 H = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
                 torch.save((H_out, H), f"out/out-hess-align-{epoch}.pt")
-            else:
+            elif epoch >= 10:
                 exit()
 
 

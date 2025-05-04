@@ -229,6 +229,14 @@ def get_outer_product_hess_decompose(model, criterion, **kwargs):
     
     return H_out, dF_dW_total, d2l_dF2_total
 
+def get_inner_rep_norm(model, criterion, **kwargs):
+    dataset = kwargs['dataset']
+    data_sample_size = 3
+    indices = np.random.permutation(np.arange(len(dataset)))[:data_sample_size]
+    for idx_count, idx in enumerate(indices):
+        src = dataset[idx][0]
+        
+
 def get_robustness(model, criterion, **kwargs):
     dataset = kwargs['dataset']
     num_perturb = kwargs['num_perturb']

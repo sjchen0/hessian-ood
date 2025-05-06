@@ -293,3 +293,12 @@ python main.py --out_dir=add_experiments/8L_8H_noMLP \
 	--distr=zipf --vocab_size=64 \
 	--plot_attn_every_epoch=20000 \
 	--n_save=100 --up_to_first_save=True
+
+### run sam
+python main.py \
+    --config_file=config.yaml \
+    --lr=0.01 \
+    --optimizer=sam \
+    --num_epoch=10000 \
+    --sharpness_task=null \
+    --out_dir=out_sam_lr0.01

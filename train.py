@@ -2,7 +2,7 @@
 import os
 import warnings
 import math
-import psutil
+# import psutil
 import numpy as np
 import torch
 import torch.nn as nn
@@ -166,6 +166,7 @@ def train_infinite(
     config,
     optimizer,
     scheduler,
+    use_sam = False,
 ):
     num_epoch = config.num_epoch
     batch_size = config.batch_size
@@ -289,7 +290,16 @@ def train_infinite(
         '''
         loss = get_loss(model, criterion, src)
         loss.backward()
-        optimizer.step()
+        
+        if use_sam:
+            def closure():
+                optimizer.zero_grad()
+                loss = get_loss(model, criterion, src)
+                loss.backward()
+                return loss
+            loss = optimizer.step(closure)
+        else:
+            optimizer.step()
         
 
         with torch.no_grad():

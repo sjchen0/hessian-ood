@@ -38,6 +38,7 @@ use_wd: True
 schedule: "constant"
 fresh_sample: True
 label_smoothing: False
+optimizer: "adamw"
 lr: 0.001 # 0.001
 wd: 0.0005
 batch_size: 50

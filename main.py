@@ -32,8 +32,8 @@ def make_scheduler(optimizer, config):
     return scheduler
 
 
-def main(**kwargs):
-    with open("./config.yaml", "r") as file:
+def main(config_file = "./config.yaml", **kwargs):
+    with open(config_file, "r") as file:
         config_args = yaml.safe_load(file)
     for k, v in kwargs.items():
         if k not in config_args:
@@ -57,13 +57,35 @@ def main(**kwargs):
     out_path = os.path.join(config.out_dir, "ckpt_0.pt")
     torch.save(model.state_dict(), out_path)
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=config.lr,
-        betas=(0.9, 0.98),
-        eps=1e-9,
-        weight_decay=config.wd,
-    )
+    use_sam = False
+    if config.optimizer == "adamw":
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=config.lr,
+            betas=(0.9, 0.98),
+            eps=1e-9,
+            weight_decay=config.wd,
+        )
+    elif config.optimizer == "sgd":
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=config.lr,
+            momentum=0.9,
+            nesterov=True,
+            weight_decay=config.wd,
+        )
+    elif config.optimizer == "sam":
+        use_sam = True
+        from sam import SAM
+        base_optimizer = torch.optim.SGD
+        optimizer = SAM(
+            model.parameters(), 
+            base_optimizer, 
+            lr=config.lr,
+            momentum=0.9,
+            nesterov=True,
+            weight_decay=config.wd,
+        )
 
     scheduler = make_scheduler(optimizer, config)
 
@@ -73,6 +95,7 @@ def main(**kwargs):
             config=config,
             optimizer=optimizer,
             scheduler=scheduler,
+            use_sam = use_sam,
         )
 
     else:

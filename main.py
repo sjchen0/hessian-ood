@@ -77,13 +77,14 @@ def main(config_file = "./config.yaml", **kwargs):
     elif config.optimizer == "sam":
         use_sam = True
         from sam import SAM
-        base_optimizer = torch.optim.SGD
+        base_optimizer = torch.optim.AdamW
         optimizer = SAM(
             model.parameters(), 
-            base_optimizer, 
+            base_optimizer,
+            rho=config.sam_rho,
             lr=config.lr,
-            momentum=0.9,
-            nesterov=True,
+            betas=(0.9, 0.98),
+            eps=1e-9,
             weight_decay=config.wd,
         )
 

@@ -267,27 +267,6 @@ def train_infinite(
 
         src, lens_train, starts_train, _, M = train_dataset[epoch]
 
-        '''
-        src, lens_train, starts_train, _ = gen_simulated_data(
-            distr=p,
-            vocab=vocab,
-            max_seq_len=config.max_seq_len,
-            regime=config.regime,
-            sample_size=batch_size,
-            pool_size=config.pool_size,
-            patterns=patterns,
-            rep_l=config.rep_l,
-            rep_h=config.rep_h,
-            device=config.device,
-        )
-        M = get_mask(
-            src,
-            lens_train,
-            starts_train,
-            ignore_segment=config.ignore_segment,
-            ignore_burning=config.ignore_burning,
-        )
-        '''
         loss = get_loss(model, criterion, src)
         loss.backward()
         
@@ -309,13 +288,13 @@ def train_infinite(
             loss_test_ood, test_err_ood = loss_err(
                 model, criterion, src_test_ood, M_test_ood
             )
-            if False: # compute full Hessian
+            if config.sharpness_task == "full-Hessian": # compute full Hessian
                 hessian_train = get_hessian(model, criterion, src=src, dataset=train_dataset)
                 sharpness = torch.trace(hessian_train)
                 print(sharpness)
 
 
-        if False: # compute block-diagonal Hessian
+        if config.sharpness_task == "block-diagonal-Hessian": # compute block-diagonal Hessian
             if (epoch % 100 == 0 and 1000 <= epoch <= 2000) or epoch in [0,700]:
                 blkdiag_hessian_train = get_blkdiag_hessian(model, criterion, src=src, dataset=train_dataset)
                 avg_sharpness = sum([torch.trace(h) for h in blkdiag_hessian_train])
@@ -338,22 +317,23 @@ def train_infinite(
                 plt.yscale('log')
                 plt.savefig(os.path.join(config.out_dir, f"spectrum_hist_epoch_{epoch}"))
 
-        if False: # directly compute Hessian trace
-            if epoch % 1000 == 0: # (epoch % 100 == 0 and 1000 <= epoch <= 2000) or epoch in [0,700]:
+        if config.sharpness_task == "Hessian-trace": # directly compute Hessian trace
+            if epoch % config.sharpness_step == 0 and epoch > 4400: # (epoch % 100 == 0 and 1000 <= epoch <= 2000) or epoch in [0,700]:
                 sharpness_trace = get_trace_hessian(model, criterion, src=src, dataset=train_dataset)
                 avg_sharpness = sum(sharpness_trace) / len(sharpness_trace)
-                
+                torch.save(avg_sharpness, f"out/sam-2e-1/sharpness-{epoch}.pt")
                 # scale the sharpness by model weight
                 # avg_sharpness *= sum([torch.norm(p).item()**2 for p in model.parameters()])
 
-        if False:
+        if config.sharpness_task == "Hessian-robustness-blk":
             if epoch % config.sharpness_step == 0:
                 avg_sharpness, diff_by_blk = get_robustness_blk(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
 
-        if False:
-            if epoch % config.sharpness_step == 0:
+        if config.sharpness_task == "Hessian-robustness":
+            if epoch % config.sharpness_step == 0 and epoch > 15000:
                 diff = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
                 avg_sharpness = sum(diff) / len(diff)
+                torch.save(avg_sharpness, f"out/adamW/sharpness-{epoch}.pt")
 
         if config.sharpness_task == "outer-product-Hessian":
             if epoch % config.sharpness_step == 0 and epoch > 9997:
@@ -473,184 +453,8 @@ def train_infinite(
 
     # np.save("out/trial_diff.npy", trial_sharpness_arr)
 
+    np.save("out/error.npy", err_arr)
     return model, err_arr, err_arr_json
 
-
-def train_finite(
-    model,
-    optimizer,
-    criterion=nn.CrossEntropyLoss(),
-    config=None,
-    print_output=False,
-    scheduler=None,
-    anneal=False,
-    save_plot_dir=None,
-    plot_attn_every_epoch=10,
-    masking_config=[1, 4],
-):
-    raise ValueError("Finite setting is out of date.")
-
-    num_epoch = config.num_epoch
-    batch_size = config.batch_size
-    epoch_change = config.num_epoch // 4
-    vocab = torch.arange(config.vocab_size).type(torch.LongTensor)
-    if config.distr == "two-level":
-        p = np.concatenate(
-            (
-                np.array([1 / 8] * 4),
-                np.array([1 / (2 * (config.vocab_size - 4))] * (config.vocab_size - 4)),
-            )
-        )
-        np.random.shuffle(p)
-        p = torch.Tensor(p)
-    else:
-        p = None
-
-    src, lens_train, starts_train, patterns = gen_simulated_data(
-        distr=p,
-        vocab=vocab,
-        max_seq_len=config.max_seq_len,
-        regime=config.regime,
-        sample_size=config.sample_size,
-        pool_size=config.pool_size,
-        patterns=None,
-        rep_l=config.rep_l,
-        rep_h=config.rep_h,
-        device=config.device,
-    )
-    M = get_mask(
-        src,
-        lens_train,
-        starts_train,
-        ignore_segment=masking_config[0],
-        ignore_burning=masking_config[1],
-    )
-
-    src_test, lens_test, starts_test, _ = gen_simulated_data(
-        distr=p,
-        vocab=vocab,
-        max_seq_len=config.max_seq_len,
-        regime=config.regime,
-        sample_size=config.sample_size_test,
-        pool_size=config.pool_size,
-        rep_l=config.rep_l,
-        rep_h=config.rep_h,
-        patterns=patterns,
-        device=config.device,
-    )
-
-    src_test_ood, lens_test_ood, starts_test_ood, _ = gen_simulated_data(
-        distr=None,
-        vocab=vocab,
-        max_seq_len=config.max_seq_len,
-        regime=config.regime,
-        pool_size=None,
-        patterns=None,
-        sample_size=config.sample_size_test,
-        rep_l=config.ood_len_pattern,
-        rep_h=config.ood_len_pattern + 1,
-        device=config.device,
-    )
-
-    M_test = get_mask(
-        src_test,
-        lens_test,
-        starts_test,
-        ignore_segment=masking_config[0],
-        ignore_burning=masking_config[1],
-    )
-    M_test_ood = get_mask(
-        src_test_ood,
-        lens_test_ood,
-        starts_test_ood,
-        ignore_segment=masking_config[0],
-        ignore_burning=masking_config[1],
-    )
-
-    err_arr = np.zeros((num_epoch, 6))
-    err_arr_json = []
-    for epoch in tqdm(range(num_epoch)):
-        model.train()
-
-        perm = np.arange(config.sample_size, dtype=int)
-        np.random.shuffle(perm)
-        for batch_idx in range(config.sample_size // batch_size):
-            indices = perm[
-                range((batch_size * batch_idx), (batch_size * batch_idx + batch_size))
-            ]
-            optimizer.zero_grad()
-            loss = loss_err(model, criterion, src[indices], M, return_err=False)
-            loss.backward()
-            optimizer.step()
-
-        with torch.no_grad():
-            model.eval()  # useful if dropout or batchnorm etc is turned on
-
-            loss_train, train_err = loss_err(model, criterion, src, M, return_err=True)
-
-            loss_test, test_err = loss_err(
-                model, criterion, src_test, M_test, return_err=True
-            )
-            loss_test_ood, test_err_ood = loss_err(
-                model, criterion, src_test_ood, M_test_ood, return_err=True
-            )
-
-            err_arr[epoch, :] = [
-                loss_train.item(),
-                train_err.item(),
-                loss_test.item(),
-                test_err.item(),
-                loss_test_ood.item(),
-                test_err_ood.item(),
-            ]
-
-            err_arr_json += [
-                {
-                    "epoch": epoch,
-                    "loss_train": loss_train.item(),
-                    "err_train": train_err.item(),
-                    "loss_test": loss_test.item(),
-                    "err_test": test_err.item(),
-                    "loss_ood": loss_test_ood.item(),
-                    "err_ood": test_err_ood.item(),
-                }
-            ]
-
-        scheduler.step()
-        if anneal and (epoch + 1) % epoch_change == 0:  # restart
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, epoch_change
-            )
-        if print_output:
-            print(
-                f"----> Epoch: {epoch+1:>5}, Train Loss: {loss.item():.3f}, Train Error: {err_arr[epoch,1]:.3f}, Test Error: {err_arr[epoch,3]:.3f}, OOD Error: {err_arr[epoch,5]:.3f}, lr: {scheduler.get_last_lr()[0]:.5f}"
-            )
-
-        if (
-            save_plot_dir is not None
-            and epoch % plot_attn_every_epoch == 0
-            and err_arr[epoch, 5] > 0.5
-        ):
-            plots_maker(
-                model,
-                config,
-                [src, src_test, src_test_ood],
-                epoch=epoch,
-                lens=[lens_train, lens_test, lens_test_ood],
-                starts=[starts_train, starts_test, starts_test_ood],
-                save_dir=os.path.join(save_plot_dir, "figures"),
-            )
-
-    lens = [lens_train, lens_test, lens_test_ood]
-    _ = plot_err_over_pos(
-        model,
-        [src, src_test, src_test_ood],
-        config.vocab_size,
-        "err_over_pos",
-        lens=lens,
-        starts=[starts_train, starts_test, starts_test_ood],
-        src_labels=["train", "test", "ood"],
-        save_dir=save_plot_dir,
-    )
-
-    return model, err_arr, err_arr_json
+def train_finite():
+    pass

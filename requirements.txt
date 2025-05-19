@@ -1,0 +1,4 @@
+scipy
+pyyaml
+fire
+seaborn

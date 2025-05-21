@@ -17,6 +17,7 @@ from utils import (
     plot_blk_spectrum
 )
 from hessian import *
+from copy import deepcopy
 warnings.simplefilter("ignore")
 
 
@@ -318,10 +319,10 @@ def train_infinite(
                 plt.savefig(os.path.join(config.out_dir, f"spectrum_hist_epoch_{epoch}"))
 
         if config.sharpness_task == "Hessian-trace": # directly compute Hessian trace
-            if epoch % config.sharpness_step == 0 and epoch > 4400: # (epoch % 100 == 0 and 1000 <= epoch <= 2000) or epoch in [0,700]:
+            if epoch % config.sharpness_step == 0 and epoch > 17000: # (epoch % 100 == 0 and 1000 <= epoch <= 2000) or epoch in [0,700]:
                 sharpness_trace = get_trace_hessian(model, criterion, src=src, dataset=train_dataset)
                 avg_sharpness = sum(sharpness_trace) / len(sharpness_trace)
-                torch.save(avg_sharpness, f"out/sam-2e-1/sharpness-{epoch}.pt")
+                torch.save(avg_sharpness, f"out/adamW/sharpness-{epoch}.pt")
                 # scale the sharpness by model weight
                 # avg_sharpness *= sum([torch.norm(p).item()**2 for p in model.parameters()])
 
@@ -376,6 +377,27 @@ def train_infinite(
             elif epoch >= 10:
                 exit()
 
+        if config.sharpness_task == "Hessian-trace-random-rotation":
+            if epoch % config.sharpness_step == 0 and epoch > 17900:
+                model.eval()
+                # the current model
+                original_state_dict = deepcopy(model.state_dict())
+                diff = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
+                avg_sharpness = sum(diff) / len(diff) * 2 * 1e6
+                torch.save(avg_sharpness, f"out/adamW/robustness-{epoch}.pt")
+                # the model with W^1_qk randomly rotated
+                for trial in range(50):
+                    state_dict = deepcopy(model.state_dict())
+                    for name in model.state_dict():
+                        if name in ['h.1.mha.W_q.weight', 'h.1.mha.W_k.weight']:
+                            rot, _ = torch.linalg.qr(torch.randn_like(model.state_dict()[name]))
+                            state_dict[name] = rot @ state_dict[name]
+                    model.load_state_dict(state_dict)
+                    diff = get_robustness(model, criterion, src=src, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config)
+                    avg_sharpness = sum(diff) / len(diff) * 2 * 1e6
+                    torch.save(avg_sharpness, f"out/adamW/robustness-rotate-{epoch}-trial-{trial}.pt")
+                model.load_state_dict(original_state_dict)
+                model.train()
 
         '''
         if len(diff_by_blk_summary) == 0:

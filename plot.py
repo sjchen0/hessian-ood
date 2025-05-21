@@ -402,11 +402,63 @@ def plot_sharpness_error_correlation(prefix):
 
         plt.savefig(f"out/aggregate/se_corr.png", dpi=300)
 
+def plot_rotation_sharpness(prefix):
+    if type(prefix) == str:
+        # fig, axes = plt.subplots(4, 1, figsize=(12, 8))
+        plt.figure(figsize=(8, 6))
+        epochs = range(20000)
+        active_epochs = []
+        sharpness_self = []
+        sharpness_rot_total = []
+        colors = plt.get_cmap("tab10").colors
+        cnt = 0
+        for epoch in epochs:
+            if os.path.exists(f"{prefix}robustness-{epoch}.pt"):
+                sharpness_rot = []
+                avg_sharpness = torch.load(f"{prefix}robustness-{epoch}.pt", map_location='cpu')
+                avg_sharpness_alter = torch.load(f"{prefix}sharpness-{epoch}.pt", map_location='cpu')
+                sharpness_self.append(max(avg_sharpness.item(), avg_sharpness_alter.item()))
+                for trial in range(50):
+                    if os.path.exists(f"{prefix}robustness-rotate-{epoch}-trial-{trial}.pt"):
+                        avg_sharpness = torch.load(f"{prefix}robustness-rotate-{epoch}-trial-{trial}.pt", map_location='cpu')
+                        sharpness_rot.append(avg_sharpness)
+                sharpness_rot_total.append(sharpness_rot)
+                active_epochs.append(epoch)
+                plt.scatter([epoch-100]*len(sharpness_rot), sharpness_rot, marker='x', alpha=0.2, linewidth=3, color=colors[1])
+                #axes[cnt].hist(sharpness_rot, bins=20, density=True, alpha=0.5)
+                #axes[cnt].axvline(x=sharpness_self[-1], linestyle='--', linewidth=3, label="trained", color=colors[0])
+                cnt += 1
+        # plt.plot(active_epochs, sharpness_self, '-s', label="trained", linewidth=2)
+        # bar plot
+        plt.bar(active_epochs, sharpness_self, width=100, label="trained", color=colors[0])
+        sharpness_rot_total = np.array(sharpness_rot_total)
+        sharpness_rot_mean = np.mean(sharpness_rot_total, axis=1)
+        sharpness_rot_std = np.std(sharpness_rot_total, axis=1)
+        # plot mean curve and one std deviation
+        # plt.plot(active_epochs, sharpness_rot_mean, '-s', label=r"$W_{QK}^{(2)}$ rotated", linewidth=2)
+        # bar plot
+        plt.bar(np.array(active_epochs) + 100, sharpness_rot_mean, width=100, label=r"$W_{QK}^{(2)}$ rotated", color=colors[1])
+        # plt.fill_between(active_epochs, sharpness_rot_mean - sharpness_rot_std, sharpness_rot_mean + sharpness_rot_std, alpha=0.2, color=colors[1])
+        # plot error bar
+        plt.errorbar(np.array(active_epochs) + 100, sharpness_rot_mean, yerr=sharpness_rot_std, fmt='o', color='black', linewidth=1, capsize=5, label="1 std")
+        plt.axhline(y=0, color='black', linewidth=1)
+        # colors = plt.get_cmap("tab10").colors
+        #for i in range(len(sharpness_self)):
+        #    plt.axvline(x=sharpness_self[i], linestyle='--', linewidth=3, label=f"{i}", color=colors[i])
+        plt.legend(fontsize=16, ncol=3)
+        #plt.ylim(-150, 320)
+        plt.xlabel("epoch", fontsize=20)
+        plt.ylabel("sharpness", fontsize=20)
+        plt.xticks(active_epochs, fontsize=20)
+        plt.yticks(fontsize=20)
+        plt.tight_layout()
+        plt.savefig(f"{prefix}rotation-sharpness.png", dpi=300)
 
 if __name__ == "__main__":
     prefix = ["out/adamW/", "out/sgd-1e-3/", "out/sam-1e-1/", "out/sam-1e-2/", "out/sam-2e-1/", "out/sam-5e-1/"]
     # prefix = "out/sgd-1e-3/"
     # plot_outer_product_hess_decompose()
-    plot_error_curve(prefix)
+    # plot_error_curve(prefix)
     # plot_sharpness_curve(prefix)
-    plot_sharpness_error_correlation(prefix)
+    # plot_sharpness_error_correlation(prefix)
+    plot_rotation_sharpness("out/adamW/")

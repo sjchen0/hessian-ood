@@ -88,13 +88,14 @@ for epoch in range(20):
     train_dataset.append((src, lens_train, starts_train, _, M))
 '''
 
-train_dataset = torch.load("data/2_layer_64_vocab_traindata/train_dataset.pt", map_location=torch.device('cuda:0'))
+# train_dataset = torch.load("data/2_layer_64_vocab_traindata/train_dataset.pt", map_location=torch.device('cuda:0'))
 
 # print("completed")
 # print(list(model.named_parameters()))
-mean_diff_curve = []
+diagonal_scores = []
+sims = []
 losses = []
-epochs = list(range(0, 10001, 1000))
+epochs = list(range(0, 10001, 100))
 # epochs = [0, 1000, 10000]
 from tqdm import tqdm
 
@@ -107,34 +108,63 @@ for epoch in tqdm(epochs):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
-    #print("model device", model.device)
-    #print("checkpoint device", checkpoint['embed.embed.weight'].device)
-    #print("param device", [p.device for p in model.parameters()])
+    W_ov = (model.h[0].mha.W_o.weight @ model.h[0].mha.W_v.weight ).detach()
+    W_qk = (model.h[1].mha.W_q.weight.T @ model.h[1].mha.W_k.weight / math.sqrt(d_model)).detach()
 
-    diff = get_robustness_subspace(model, criterion, dataset=train_dataset, num_perturb=100, r_perturb=1e-3, data_sample_size=20, config=config, perturb_name='h.1.mha.W_v.weight')
+    # diagonal score
+    W = (W_ov+W_ov.T) @ W_qk
+    diagonal_score = (torch.mean(torch.diagonal(W)) - torch.mean(W)) / torch.std(W)
+    # diagonal_score = torch.trace(W) / torch.linalg.norm(W) / np.sqrt(d_model)
+    diagonal_scores.append(diagonal_score.item())
 
-    # if epoch < len(train_dataset):
-    #     loss = get_loss(model, criterion, train_dataset[epoch][0])
-    #     losses.append(loss.cpu())
+    # subspace alignment
+    r = 15
+    U_ov, S_ov, V_ov_t = torch.linalg.svd(W_ov+W_ov.T)
+    U_qk, S_qk, V_qk_t = torch.linalg.svd(W_qk)
+    U_qk = U_qk[:, :r]
+    V_ov = V_ov_t[:r, :].T
+    _, sim, _ = torch.linalg.svd(U_qk.T @ V_ov)
+    sim = torch.max(sim)
+    sims.append(sim.item())
 
-    mean_diff = [np.mean(diff[i]) for i in range(len(diff.keys()))]
-    mean_diff_curve.append(mean_diff)
+# simulate random initialization case
+diagonal_scores_random = []
+sims_random = []
+for trial in tqdm(range(100)):
+    W_ov = torch.randn(d_model, d_model) @ torch.randn(d_model, d_model)
+    W_qk = torch.randn(d_model, d_model) @ torch.randn(d_model, d_model)
+    W = (W_ov + W_ov.T) @ W_qk
+    diagonal_score = (torch.mean(torch.diagonal(W)) - torch.mean(W)) / torch.std(W)
+    diagonal_scores_random.append(diagonal_score.item())
 
-mean_diff_curve = np.array(mean_diff_curve)
-if False:
-    for i in range(len(mean_diff_curve)):
-        sharpness_mat = mean_diff_curve[i].reshape((config.d_model, config.d_model))
-        plt.imshow(sharpness_mat)
-        plt.savefig(f"sharpness_mat_{epochs[i]}.png")
+    r = 15
+    U_ov, S_ov, V_ov_t = torch.linalg.svd(W_ov + W_ov.T)
+    U_qk, S_qk, V_qk_t = torch.linalg.svd(W_qk)
+    U_qk = U_qk[:, :r]
+    V_ov = V_ov_t[:r, :].T
+    _, sim, _ = torch.linalg.svd(U_qk.T @ V_ov)
+    sim = torch.max(sim)
+    sims_random.append(sim.item())
+diagonal_scores_random = np.mean(np.array(diagonal_scores_random))
+sims_random = np.mean(np.array(sims_random))
 
 
-if True:
-    for i in range(mean_diff_curve.shape[1]):
-        plt.plot(epochs, mean_diff_curve[:,i], '-o')
-    plt.plot(epochs, np.sum(mean_diff_curve, axis=1), '-o')
-    # plt.xscale('log')
-    plt.savefig("subspace_sharpness.png")
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6))
+ax1.plot(epochs, diagonal_scores, linewidth=3, label="trained")
+ax1.set_xscale('log')
+ax1.set_ylabel("diagonal score", fontsize=20)
+ax1.axhline(y=diagonal_scores_random, color='r', linestyle='--', linewidth=3, label="random init")
+ax1.tick_params(axis='both', labelsize=20)
+ax1.legend(fontsize=16)
 
-# plt.figure()
-# plt.plot(epochs[:-1], losses, '-o')
-# plt.savefig("checkpoint_loss.png")
+ax2.plot(epochs, sims, linewidth=3, label="trained")
+ax2.set_xlabel("epoch", fontsize=20)
+ax2.set_ylabel("subspace alignment", fontsize=20)
+ax2.axhline(y=sims_random, color='r', linestyle='--', linewidth=3, label="random init")
+ax2.legend(fontsize=16)
+ax2.tick_params(axis='both', labelsize=20)
+ax2.set_xscale('log')
+
+plt.tight_layout()
+fig.align_ylabels([ax1, ax2])
+plt.savefig("dscore_and_subspace_alignment.png", dpi=300)

@@ -38,7 +38,7 @@ use_wd: True
 schedule: "constant"
 fresh_sample: True
 label_smoothing: False
-optimizer: "sam"
+optimizer: "adamw"
 lr: 0.001 # 0.001
 wd: 0.0005
 batch_size: 50
@@ -61,4 +61,4 @@ out_dir: "out"
 
 # sharpness task
 sharpness_step: 500
-sharpness_task: "Hessian-trace" # "outer-product-Hessian-random-alignment"
+sharpness_task: "Hessian-trace-random-rotation" # "outer-product-Hessian-random-alignment"
